@@ -6,6 +6,17 @@ from streamlit_js_eval import streamlit_js_eval
 st.set_page_config(page_title="ChatMessageHistory", page_icon="💬")
 st.title("HR Chatbot")
 
+# Constants
+MAX_USER_MESSAGES = 5          # number of user messages that get LLM replies
+MAX_CHAT_CHARS = 1000                
+MAX_FIELD_CHARS = 200
+INTERVIEW_MODEL = "gpt-4o"
+FEEDBACK_MODEL = "gpt-4o"
+
+DEFAULT_LEVEL = "Junior"
+DEFAULT_POSITION = "Data Scientist"
+DEFAULT_COMPANY = "Amazon"
+
 # Initialize session state variables
 if "setup_complete" not in st.session_state:
     st.session_state.setup_complete = False
@@ -43,9 +54,9 @@ if not st.session_state.setup_complete:
 
    
     # Get personal information input
-    st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=40)
-    st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=200)
-    st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=200)
+    st.session_state["name"] = st.text_input(label="Name", value=st.session_state["name"], placeholder="Enter your name", max_chars=MAX_FIELD_CHARS)
+    st.session_state["experience"] = st.text_area(label="Experience", value=st.session_state["experience"], placeholder="Describe your experience", max_chars=MAX_FIELD_CHARS)
+    st.session_state["skills"] = st.text_area(label="Skills", value=st.session_state["skills"], placeholder="List your skills", max_chars=MAX_FIELD_CHARS)
 
     
     # Company and Position Section
@@ -53,11 +64,11 @@ if not st.session_state.setup_complete:
 
     # Initialize session state for company and position information and setting default values 
     if "level" not in st.session_state:
-        st.session_state["level"] = "Junior"
+        st.session_state["level"] = DEFAULT_LEVEL
     if "position" not in st.session_state:
-        st.session_state["position"] = "Data Scientist"
+        st.session_state["position"] = DEFAULT_POSITION
     if "company" not in st.session_state:
-        st.session_state["company"] = "Amazon"
+        st.session_state["company"] = DEFAULT_COMPANY
 
     col1, col2 = st.columns(2)
     with col1:
@@ -102,7 +113,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
     # Setting OpenAI model if not already initialized
     if "openai_model" not in st.session_state:
-        st.session_state["openai_model"] = "gpt-4o"
+        st.session_state["openai_model"] = INTERVIEW_MODEL
 
     # Initializing the system prompt for the chatbot
     if not st.session_state.messages:
@@ -123,18 +134,18 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
     # Handle user input and OpenAI response
     # Put a max_chars limit
-    if st.session_state.user_message_count < 6:
-        if prompt := st.chat_input("Your response", max_chars=1000):
+    if st.session_state.user_message_count < MAX_USER_MESSAGES + 1:
+        if prompt := st.chat_input("Your response", max_chars=MAX_CHAT_CHARS):
             st.session_state.messages.append({"role": "user", "content": prompt})
             # Display user message
             with st.chat_message("user"):
                 # Render message content
                 st.markdown(prompt)
 
-            if st.session_state.user_message_count  < 5:
+            if st.session_state.user_message_count  < MAX_USER_MESSAGES:
                 
                 # Add a system instruction so LLM knows this is the final reply
-                if st.session_state.user_message_count  == 4:
+                if st.session_state.user_message_count  == MAX_USER_MESSAGES - 1:
                     st.session_state.messages.append(
                                 {
                                     "role": "system",
@@ -143,7 +154,9 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                                         First, fully answer the user's last message. 
                                         Then clearly tell the user that this is your last
                                         message and that they cannot ask further questions 
-                                        in this chat. Also always tell the user that any additional additional context or information can be shared below. That information will be analised in feedback too"""
+                                        in this chat. Also always tell the user that any additional 
+                                        additional context or information can be shared below. 
+                                        That information will be analized in feedback too"""
                                     )
                                 }
                             )
@@ -176,8 +189,8 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
 
 
-    # Check if the user message count reaches 6
-    if st.session_state.user_message_count >= 6:
+    # Check if the user message count reaches maximum amount
+    if st.session_state.user_message_count >= MAX_USER_MESSAGES + 1:
         st.session_state.chat_complete = True
 
 # Show "Get Feedback" 
@@ -196,7 +209,7 @@ if st.session_state.feedback_shown:
 
         # Generate feedback using the stored messages and write a system prompt for the feedback
         feedback_completion = feedback_client.chat.completions.create(
-            model="gpt-4o",
+            model=FEEDBACK_MODEL,
             messages=[
                 {"role": "system", "content": """You are a helpful tool that provides feedback on an interviewee performance.
                 Before the Feedback give a score of 1 to 10.
@@ -213,6 +226,5 @@ if st.session_state.feedback_shown:
         st.session_state.restart = True
         
     # Button to restart the interview
-    # why is it rewritting the feedback before closing????
     if st.button("Restart Interview", type="primary"):
         streamlit_js_eval(js_expressions="parent.window.location.reload()")
