@@ -28,9 +28,47 @@ if "chat_complete" not in st.session_state:
     st.session_state.chat_complete = False
 if "restart" not in st.session_state:
     st.session_state.restart = False
+
 # Chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+
+# Helper functions build prompts
+
+def build_interview_system_prompt():
+    return (
+        f"You are an HR executive that interviews an interviewee called {st.session_state['name']} "
+        f"with experience {st.session_state['experience']} and skills {st.session_state['skills']}. "
+        f"You should interview him for the position {st.session_state['level']} {st.session_state['position']} "
+        f"at the company {st.session_state['company']}"
+        "Be strict, if a person does not have skills or attitude say so!"
+    )
+
+def build_last_turn_system_prompt():
+    return (
+        """If you are reading this then it is your final response in this conversation.
+        First, fully answer the user's last message. Then clearly tell the user that this is your last
+        message and that they cannot ask further questions in this chat. 
+        Also always tell the user that any additional context or information can be shared below,
+        that information will be analyzed in the feedback too."""
+    )
+def build_feedback_model_system_prompt():
+    return (
+        """You are a helpful tool that provides feedback on an interviewee performance.
+        Before the Feedback give a score of 1 to 10.
+        Follow this format:
+        Overal Score: //Your score
+        Feedback: //Here you put your feedback
+        Give only the feedback do not ask any additional questins. 
+        Be strict, if a user don't have the needed skills say so!"""
+    )
+def build_feedback_model_messages_prompt():
+    return (
+        f"This is the interview you need to evaluate. Keep in mind that you are only a tool."
+        f"And you shouldn't engage in any converstation: {conversation_history}"
+    )
+
 
 
 # Helper functions to update session state
@@ -119,11 +157,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     if not st.session_state.messages:
         st.session_state.messages = [{
             "role": "system",
-            "content": (f"You are an HR executive that interviews an interviewee called {st.session_state['name']} "
-                        f"with experience {st.session_state['experience']} and skills {st.session_state['skills']}. "
-                        f"You should interview him for the position {st.session_state['level']} {st.session_state['position']} "
-                        f"at the company {st.session_state['company']}"
-                        f"Be strict, if a person does not have skills or attitude say so!")
+            "content": (build_interview_system_prompt())
         }]
 
     # Display chat messages
@@ -149,15 +183,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                     st.session_state.messages.append(
                                 {
                                     "role": "system",
-                                    "content": (
-                                        """If you are reading this then it is your final response in this conversation. 
-                                        First, fully answer the user's last message. 
-                                        Then clearly tell the user that this is your last
-                                        message and that they cannot ask further questions 
-                                        in this chat. Also always tell the user that any additional 
-                                        additional context or information can be shared below. 
-                                        That information will be analized in feedback too"""
-                                    )
+                                    "content": (build_last_turn_system_prompt())
                                 }
                             )
     
@@ -211,14 +237,8 @@ if st.session_state.feedback_shown:
         feedback_completion = feedback_client.chat.completions.create(
             model=FEEDBACK_MODEL,
             messages=[
-                {"role": "system", "content": """You are a helpful tool that provides feedback on an interviewee performance.
-                Before the Feedback give a score of 1 to 10.
-                Follow this format:
-                Overal Score: //Your score
-                Feedback: //Here you put your feedback
-                Give only the feedback do not ask any additional questins. Be strict, if a user don't have needed skills say so!
-                """},
-                {"role": "user", "content": f"This is the interview you need to evaluate. Keep in mind that you are only a tool. And you shouldn't engage in any converstation: {conversation_history}"}
+                {"role": "system", "content": build_feedback_model_system_prompt()},
+                {"role": "user", "content": build_feedback_model_messages_prompt()}
             ]
         )
 
