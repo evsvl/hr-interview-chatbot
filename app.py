@@ -35,14 +35,14 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 
-# Helper functions build prompts
+# Helper functions for building prompts
 
 def build_interview_system_prompt():
     return (
         f"You are an HR executive that interviews an interviewee called {st.session_state['name']} "
         f"with experience {st.session_state['experience']} and skills {st.session_state['skills']}. "
         f"You should interview him for the position {st.session_state['level']} {st.session_state['position']} "
-        f"at the company {st.session_state['company']}"
+        f"at the company {st.session_state['company']}. "
         "Be strict, if a person does not have skills or attitude say so!"
     )
 
@@ -64,13 +64,39 @@ def build_feedback_model_system_prompt():
         Give only the feedback do not ask any additional questins. 
         Be strict, if a user don't have the needed skills say so!"""
     )
-def build_feedback_model_messages_prompt():
+def build_feedback_model_messages_prompt(conversation_history: str):
     return (
-        f"This is the interview you need to evaluate. Keep in mind that you are only a tool."
+        f"This is the interview you need to evaluate. Keep in mind that you are only a tool. "
         f"And you shouldn't engage in any converstation: {conversation_history}"
     )
 
+# Helper functions for LLM calls
 
+def _create_chat_completion(messages, model: str, stream: bool):
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    try:
+        return client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=stream,
+        )
+    except Exception:
+        st.error("Error calling the language model. Please try again later", icon="🚨")
+        st.stop()
+
+def stream_interview_completion(messages):
+    return _create_chat_completion(
+        messages=messages,
+        model=INTERVIEW_MODEL,
+        stream=True
+    )
+
+def get_feedback_completion(messages):
+    return _create_chat_completion(
+        messages=messages,
+        model=FEEDBACK_MODEL,
+        stream=False
+    )
 
 # Helper functions to update session state
 def complete_setup():
@@ -145,13 +171,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     icon="👋",
     )
 
-    # Initialize OpenAI client
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-    # Setting OpenAI model if not already initialized
-    if "openai_model" not in st.session_state:
-        st.session_state["openai_model"] = INTERVIEW_MODEL
-
     # Initializing the system prompt for the chatbot
     if not st.session_state.messages:
         st.session_state.messages = [{
@@ -188,18 +207,16 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     
                 # Quering LLM with all messages as a context
                 with st.chat_message("assistant"):
-                    #creating the query
-                    stream = client.chat.completions.create(
-                        model=st.session_state["openai_model"],
-                        messages=[
+                    stream = stream_interview_completion(
+                        [
                             {"role": m["role"], "content": m["content"]}
                             for m in st.session_state.messages
-                        ],
-                        #Stream for nice text flow 
-                        stream=True,
+                        ]
                     )
-                    response = st.write_stream(stream) 
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                    response = st.write_stream(stream)
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": response}
+                )
 
                 
             else:
@@ -229,15 +246,17 @@ if st.session_state.feedback_shown:
     if not st.session_state.restart:
         conversation_history = "\n".join([f"{msg['role']}: {msg['content']}" for msg in st.session_state.messages])
 
-        # Initialize new OpenAI client instance for feedback
-        feedback_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
         # Generate feedback using the stored messages and write a system prompt for the feedback
-        feedback_completion = feedback_client.chat.completions.create(
-            model=FEEDBACK_MODEL,
-            messages=[
-                {"role": "system", "content": build_feedback_model_system_prompt()},
-                {"role": "user", "content": build_feedback_model_messages_prompt()}
+        feedback_completion = get_feedback_completion(
+            [
+                {
+                    "role": "system",
+                    "content": build_feedback_model_system_prompt(),
+                },
+                {
+                    "role": "user",
+                    "content": build_feedback_model_messages_prompt(conversation_history),
+                }
             ]
         )
 
