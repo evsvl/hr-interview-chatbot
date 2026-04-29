@@ -9,7 +9,8 @@ st.title("HR Chatbot")
 # Constants
 MAX_USER_MESSAGES = 5          # number of user messages that get LLM replies
 MAX_CHAT_CHARS = 1000                
-MAX_FIELD_CHARS = 200
+MAX_FIELD_CHARS = 500
+
 INTERVIEW_MODEL = "gpt-4o"
 FEEDBACK_MODEL = "gpt-4o"
 
@@ -140,9 +141,7 @@ if not st.session_state.setup_complete:
 if st.session_state.setup_complete and not st.session_state.feedback_shown and not st.session_state.chat_complete:
 
     st.info(
-    """
-    Start by introducing yourself. Pls note that this interview is limited to 5 messages
-    """,
+        f"Start by introducing yourself. Pls note that this interview is limited to {MAX_USER_MESSAGES} messages",
     icon="👋",
     )
 
